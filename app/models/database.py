@@ -10,7 +10,7 @@ class Users(db.Model):
     id          = Column(Integer, autoincrement=True, primary_key=True)
     userId      = Column(Integer, nullable=False, unique=True)
     userName    = Column(String(50), nullable=False)
-    password    = Column(String(100), nullable=False)
+    password    = Column(String(100), nullable=False, default='123456')
     mailAddress = Column(String(100), nullable=False)
     isActivated = Column(BOOLEAN)
     segmentCode = Column(String(10))

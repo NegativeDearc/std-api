@@ -187,6 +187,7 @@ class Dash(Resource):
         one_time_finish = db.session.query(func.count(Tasks.id))\
             .filter(
             Tasks.createBy == user_id,
+            Tasks.isVisible == True,
             or_(
                 Tasks.punchTime <= Tasks.dueDate,
                 Tasks.punchTime <= Tasks.nextLoopAt
@@ -197,6 +198,7 @@ class Dash(Resource):
             .filter(
             Tasks.createBy == user_id,
             Tasks.isDone == False,
+            Tasks.isVisible == True,
             or_(
                 Tasks.nextLoopAt >= datetime.datetime.now(),
                 Tasks.dueDate >= datetime.datetime.now()
@@ -208,16 +210,18 @@ class Dash(Resource):
                 and_(
                     Tasks.createBy == user_id,
                     Tasks.isDone == False,
+                    Tasks.isVisible == True,
                     or_(
                         Tasks.nextLoopAt < datetime.datetime.now(),
                         Tasks.dueDate < datetime.datetime.now()) |
                 and_(
                     Tasks.createBy == user_id,
                     Tasks.isDone == True,
+                    Tasks.isVisible == True,
                     or_(
                         Tasks.punchTime > Tasks.nextLoopAt,
                         Tasks.punchTime > Tasks.dueDate))
             )
         ).one()
 
-        return { 'OTF': one_time_finish[0], 'IP': in_progress[0], 'D': delay[0] }, 200
+        return {'OTF': one_time_finish[0], 'IP': in_progress[0], 'D': delay[0]}, 200
