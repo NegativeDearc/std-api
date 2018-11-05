@@ -2,7 +2,8 @@ from flask_restful import Resource, marshal_with, fields, reqparse
 from app.models.database import Users, Tasks
 from app import db
 from flask import jsonify, request, make_response
-from sqlalchemy import desc, asc, or_, and_, func
+from sqlalchemy import desc, asc, or_, and_, func, case
+from sqlalchemy.sql import label
 from app.utils.next_run import next_run
 import datetime
 
@@ -26,7 +27,7 @@ class Task(Resource):
         'taskTitle': fields.String,
         'taskDescription': fields.String,
         'createBy': fields.Integer,
-        'frequency': fields.Integer,
+        'frequency': fields.String,
         'nextLoopAt': fields.String,
         'punchTime': fields.String,
         'remindAt': fields.String,
@@ -48,7 +49,7 @@ class Task(Resource):
         parser.add_argument('taskTitle', type=str)
         parser.add_argument('taskDescription', type=str)
         parser.add_argument('dueDate', type=str)
-        parser.add_argument('frequency', type=int)
+        parser.add_argument('frequency', type=str)
         parser.add_argument('remindAt', type=str)
         parser.add_argument('taskTags', type=str)
 
@@ -60,19 +61,24 @@ class Task(Resource):
             if v is not None:
                 form.update({k: v})
 
-        # print(args)
-        # print(form)
-
         db.session.query(Tasks).filter(Tasks.id == task_id) \
             .update(form)
         db.session.commit()
 
         return make_response(('UPDATED', 200))
 
+    @marshal_with(resource_fields)
     def put(self, task_id):
+        _is_done = request.form.get('isDone')
+
+        if _is_done == 'true':
+            is_done = True
+        elif _is_done == 'false':
+            is_done = False
+
         task = db.session.query(Tasks).filter(Tasks.id == task_id).first()
 
-        if task.frequency != 0 and \
+        if task.frequency != '' and \
                 task.isDone is False and \
                 (task.isLoop is False or task.isLoop is None):
             new_task = Tasks(
@@ -89,11 +95,6 @@ class Task(Resource):
             )
             db.session.add(new_task)
 
-        if request.form.get('isDone') == 'true':
-            is_done = True
-        if request.form.get('isDone') == 'false':
-            is_done = False
-
         db.session.query(Tasks).filter(Tasks.id == task_id) \
             .update({
             'isDone': is_done,
@@ -103,10 +104,9 @@ class Task(Resource):
 
         try:
             db.session.commit()
+            return task, 200
         except Exception as e:
-            db.session.rollback()
-
-        return make_response(('OK', 200))
+            return e, 500
 
     def delete(self, task_id):
         db.session.query(Tasks).filter(Tasks.id == task_id). \
@@ -124,7 +124,7 @@ class UserTask(Resource):
         'taskTitle': fields.String,
         'taskDescription': fields.String,
         'createBy': fields.Integer,
-        'frequency': fields.Integer,
+        'frequency': fields.String,
         'nextLoopAt': fields.String,
         'punchTime': fields.String,
         'remindAt': fields.String,
@@ -146,7 +146,6 @@ class UserTask(Resource):
         return tasks, 200
 
     def post(self, user_id):
-        # print(request.form)
         task = Tasks(
             taskTitle=request.form.get("taskName"),
             taskDescription=request.form.get("taskDescription"),
@@ -155,7 +154,6 @@ class UserTask(Resource):
             remindAt=request.form.get("taskTimeSlot"),
             dueDate=request.form.get("taskDueDateParsed"),
             taskTags=request.form.get("taskTags"),
-            nextLoopAt=next_run(request.form.get("taskRepeatInterval"), '')
         )
 
         db.session.add(task)
@@ -184,7 +182,7 @@ class Search(Resource):
 
 class Dash(Resource):
     def get(self, user_id):
-        one_time_finish = db.session.query(func.count(Tasks.id))\
+        on_time_finish = db.session.query(func.count(Tasks.id))\
             .filter(
             Tasks.createBy == user_id,
             Tasks.isVisible == True,
@@ -224,4 +222,28 @@ class Dash(Resource):
             )
         ).one()
 
-        return {'OTF': one_time_finish[0], 'IP': in_progress[0], 'D': delay[0]}, 200
+        return {'OTF': on_time_finish[0], 'IP': in_progress[0], 'D': delay[0]}, 200
+
+
+class Punch(Resource):
+    resource_fields = {
+        'id': fields.String,
+        'taskTitle': fields.String,
+        'punchTime': fields.DateTime,
+        'isDone': fields.Boolean,
+        'nextLoopAt': fields.DateTime,
+        'status': fields.Boolean
+    }
+
+    @marshal_with(resource_fields)
+    def get(self, user_id):
+        test = db.session.query(
+            Tasks.id,
+            Tasks.taskTitle,
+            Tasks.punchTime,
+            Tasks.isDone,
+            Tasks.nextLoopAt,
+            (Tasks.punchTime > Tasks.nextLoopAt).label('status')
+        ).filter(Tasks.createBy == user_id).all()
+        print(test)
+        return test

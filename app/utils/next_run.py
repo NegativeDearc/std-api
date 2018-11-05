@@ -2,36 +2,23 @@ import datetime
 from dateutil.parser import parse
 
 
-def next_run(freq: int,  last_run_time: str):
-    if not last_run_time:
-        _date = datetime.datetime.now()
+def next_run(freq: str, last_run_at):
+    if not freq:
+        return None
     else:
-        if isinstance(last_run_time, str):
-            _date = parse(last_run_time)
+        week_index = freq.split(',')
+        if last_run_at is None:
+            _d = datetime.datetime.now() + datetime.timedelta(days=1)
         else:
-            _date = last_run_time
+            if isinstance(last_run_at, str):
+                _d = parse(last_run_at) + datetime.timedelta(days=1)
+            else:
+                _d = last_run_at + datetime.timedelta(days=1)
 
-    next_run_at = None
-
-    if freq == 0:
-        next_run_at = None
-    elif freq == 1:
-        next_run_at = _date + datetime.timedelta(days=1)
-    elif freq == 2:
-        if _date.strftime('%a') == 'Fri':
-            next_run_at = _date + datetime.timedelta(days=3)
-        elif _date.strftime('%a') == 'Sat':
-            next_run_at = _date + datetime.timedelta(days=2)
-        else:
-            next_run_at = _date + datetime.timedelta(days=1)
-    elif freq == 3:
-        next_run_at = _date + datetime.timedelta(days=7)
-    elif freq == 4:
-        next_run_at = _date + datetime.timedelta(days=7)
-
-    return next_run_at
+        while not _d.strftime('%w') in week_index:
+            _d = _d + datetime.timedelta(days=1)
+        return parse(_d.strftime('%Y-%m-%d'))
 
 
 if __name__ == '__main__':
-    next_run(1, None)
-    next_run(4, '2018-10-31')
+    print(next_run('4,3,2,5', datetime.datetime.now()))

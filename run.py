@@ -6,6 +6,7 @@ from tornado.ioloop import IOLoop
 
 
 app = init_app(config['dev'])
+print(app.config)
 
 
 if __name__ == '__main__':

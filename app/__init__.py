@@ -10,7 +10,7 @@ db = SQLAlchemy(use_native_unicode='utf8')
 
 
 def init_app(cfg):
-    from app.routes.routes import Login, Task, UserTask, Search, Dash
+    from app.routes.routes import Login, Task, UserTask, Search, Dash, Punch
 
     app = Flask(__name__)
     app.config.from_object(cfg)
@@ -20,6 +20,7 @@ def init_app(cfg):
     api.add_resource(Search, '/api/task/search')
     api.add_resource(Login, '/api/auth/login')
     api.add_resource(Dash, '/api/dash/<string:user_id>')
+    api.add_resource(Punch, '/api/punch/<string:user_id>')
 
     api.init_app(app)
     cors.init_app(app)
