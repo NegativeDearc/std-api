@@ -2,10 +2,10 @@ from flask_restful import Resource, marshal_with, fields, reqparse
 from app.models.database import Users, Tasks
 from app import db
 from flask import jsonify, request, make_response
-from sqlalchemy import desc, asc, or_, and_, func, case
-from sqlalchemy.sql import label
+from sqlalchemy import desc, asc, or_, and_, func
 from app.utils.next_run import next_run
 import datetime
+import pandas as pd
 
 
 class Login(Resource):
@@ -154,6 +154,7 @@ class UserTask(Resource):
             remindAt=request.form.get("taskTimeSlot"),
             dueDate=request.form.get("taskDueDateParsed"),
             taskTags=request.form.get("taskTags"),
+            nextLoopAt=next_run(request.form.get("taskRepeatInterval"), last_run_at=None)
         )
 
         db.session.add(task)
@@ -226,24 +227,31 @@ class Dash(Resource):
 
 
 class Punch(Resource):
+    # ref: https://github.com/flask-restful/flask-restful/issues/469
+    # for marshal issue all null problem
     resource_fields = {
-        'id': fields.String,
-        'taskTitle': fields.String,
-        'punchTime': fields.DateTime,
+        'needFinishBefore': fields.DateTime(dt_format='iso8601'),
+        'punchTime': fields.DateTime(dt_format='iso8601'),
+        'isDelay': fields.Boolean,
         'isDone': fields.Boolean,
-        'nextLoopAt': fields.DateTime,
-        'status': fields.Boolean
+        'isLoop': fields.Boolean
     }
 
     @marshal_with(resource_fields)
     def get(self, user_id):
-        test = db.session.query(
+        rv = db.session.query(
             Tasks.id,
-            Tasks.taskTitle,
+            func.timestamp(Tasks.nextLoopAt, Tasks.remindAt).label('needFinishBefore'),
             Tasks.punchTime,
-            Tasks.isDone,
-            Tasks.nextLoopAt,
-            (Tasks.punchTime > Tasks.nextLoopAt).label('status')
-        ).filter(Tasks.createBy == user_id).all()
-        print(test)
-        return test
+            (Tasks.frequency != 0).label('isLoop'),
+            (or_(Tasks.punchTime > func.timestamp(Tasks.nextLoopAt, Tasks.remindAt),
+                 Tasks.nextLoopAt < func.current_timestamp())).label('isDelay'),
+            Tasks.isDone
+        ).filter(Tasks.createBy == user_id).order_by(func.timestamp(Tasks.nextLoopAt, Tasks.remindAt)).all()
+
+        res = []
+
+        for x in rv:
+            res.append(x._asdict())
+
+        return res
