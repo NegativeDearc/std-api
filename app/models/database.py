@@ -4,6 +4,10 @@ from app import db
 from sqlalchemy.dialects.mysql import TIME
 
 
+def generate_uid():
+    return uuid4().__str__()
+
+
 class Users(db.Model):
     __tablename__ = 'std_users'
 
@@ -20,7 +24,7 @@ class Tasks(db.Model):
     __tablename__ = 'std_tasks'
 
     id              = Column(Integer, autoincrement=True, primary_key=True)
-    uid             = Column(String(50), default=uuid4().__str__())
+    uid             = Column(String(50), default=generate_uid)
     taskTitle       = Column(String(200), nullable=False)
     taskDescription = Column(String(300))
     createBy        = Column(Integer, nullable=False)

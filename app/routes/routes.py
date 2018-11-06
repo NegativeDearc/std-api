@@ -5,7 +5,6 @@ from flask import jsonify, request, make_response
 from sqlalchemy import desc, asc, or_, and_, func
 from app.utils.next_run import next_run
 import datetime
-import pandas as pd
 
 
 class Login(Resource):
@@ -187,10 +186,7 @@ class Dash(Resource):
             .filter(
             Tasks.createBy == user_id,
             Tasks.isVisible == True,
-            or_(
-                Tasks.punchTime <= Tasks.dueDate,
-                Tasks.punchTime <= Tasks.nextLoopAt
-            )
+            Tasks.punchTime <= func.timestamp(Tasks.nextLoopAt, Tasks.remindAt)
         ).one()
 
         in_progress = db.session.query(func.count(Tasks.id))\
@@ -198,10 +194,7 @@ class Dash(Resource):
             Tasks.createBy == user_id,
             Tasks.isDone == False,
             Tasks.isVisible == True,
-            or_(
-                Tasks.nextLoopAt >= datetime.datetime.now(),
-                Tasks.dueDate >= datetime.datetime.now()
-            )
+            func.timestamp(Tasks.nextLoopAt, Tasks.remindAt) >= datetime.datetime.now(),
         ).one()
 
         delay = db.session.query(func.count(Tasks.id))\
@@ -210,17 +203,12 @@ class Dash(Resource):
                     Tasks.createBy == user_id,
                     Tasks.isDone == False,
                     Tasks.isVisible == True,
-                    or_(
-                        Tasks.nextLoopAt < datetime.datetime.now(),
-                        Tasks.dueDate < datetime.datetime.now()) |
+                    func.timestamp(Tasks.nextLoopAt, Tasks.remindAt) < datetime.datetime.now()),
                 and_(
                     Tasks.createBy == user_id,
                     Tasks.isDone == True,
                     Tasks.isVisible == True,
-                    or_(
-                        Tasks.punchTime > Tasks.nextLoopAt,
-                        Tasks.punchTime > Tasks.dueDate))
-            )
+                    Tasks.punchTime > func.timestamp(Tasks.nextLoopAt, Tasks.remindAt))
         ).one()
 
         return {'OTF': on_time_finish[0], 'IP': in_progress[0], 'D': delay[0]}, 200
