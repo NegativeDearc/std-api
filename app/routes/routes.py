@@ -2,8 +2,12 @@ from flask_restful import Resource, marshal_with, fields, reqparse
 from app.models.database import Users, Tasks
 from app import db
 from flask import jsonify, request, make_response
+from itertools import groupby
+from operator import itemgetter
 from sqlalchemy import desc, asc, or_, and_, func
 from app.utils.next_run import next_run
+from app.utils.rolling_seven_days_from_now import rolling_seven
+from app.utils.pattern_search import is_central, is_management
 import datetime
 
 
@@ -182,14 +186,14 @@ class Search(Resource):
 
 class Dash(Resource):
     def get(self, user_id):
-        on_time_finish = db.session.query(func.count(Tasks.id))\
+        on_time_finish = db.session.query(func.count(Tasks.id)) \
             .filter(
             Tasks.createBy == user_id,
             Tasks.isVisible == True,
             Tasks.punchTime <= func.timestamp(Tasks.nextLoopAt, Tasks.remindAt)
         ).one()
 
-        in_progress = db.session.query(func.count(Tasks.id))\
+        in_progress = db.session.query(func.count(Tasks.id)) \
             .filter(
             Tasks.createBy == user_id,
             Tasks.isDone == False,
@@ -197,8 +201,9 @@ class Dash(Resource):
             func.timestamp(Tasks.nextLoopAt, Tasks.remindAt) >= datetime.datetime.now(),
         ).one()
 
-        delay = db.session.query(func.count(Tasks.id))\
+        delay = db.session.query(func.count(Tasks.id)) \
             .filter(
+            or_(
                 and_(
                     Tasks.createBy == user_id,
                     Tasks.isDone == False,
@@ -209,37 +214,87 @@ class Dash(Resource):
                     Tasks.isDone == True,
                     Tasks.isVisible == True,
                     Tasks.punchTime > func.timestamp(Tasks.nextLoopAt, Tasks.remindAt))
+            )
         ).one()
 
         return {'OTF': on_time_finish[0], 'IP': in_progress[0], 'D': delay[0]}, 200
 
 
-class Punch(Resource):
-    # ref: https://github.com/flask-restful/flask-restful/issues/469
-    # for marshal issue all null problem
-    resource_fields = {
-        'needFinishBefore': fields.DateTime(dt_format='iso8601'),
-        'punchTime': fields.DateTime(dt_format='iso8601'),
-        'isDelay': fields.Boolean,
-        'isDone': fields.Boolean,
-        'isLoop': fields.Boolean
-    }
+# class Punch(Resource):
+#     # ref: https://github.com/flask-restful/flask-restful/issues/469
+#     # for marshal issue all null problem
+#     resource_fields = {
+#         'needFinishBefore': fields.DateTime(dt_format='iso8601'),
+#         'punchTime': fields.DateTime(dt_format='iso8601'),
+#         'isDelay': fields.Boolean,
+#         'isDone': fields.Boolean,
+#         'isLoop': fields.Boolean
+#     }
+#
+#     @marshal_with(resource_fields)
+#     def get(self, user_id):
+#         rv = db.session.query(
+#             Tasks.id,
+#             func.timestamp(Tasks.nextLoopAt, Tasks.remindAt).label('needFinishBefore'),
+#             Tasks.punchTime,
+#             (Tasks.frequency != 0).label('isLoop'),
+#             (or_(Tasks.punchTime > func.timestamp(Tasks.nextLoopAt, Tasks.remindAt),
+#                  Tasks.nextLoopAt < func.current_timestamp())).label('isDelay'),
+#             Tasks.isDone
+#         ).filter(Tasks.createBy == user_id,
+#                  and_(Tasks.nextLoopAt <= rolling_seven()[1],
+#                       Tasks.nextLoopAt >= rolling_seven()[0])
+#                  ).order_by(func.timestamp(Tasks.nextLoopAt, Tasks.remindAt)).all()
+#
+#         res = []
+#
+#         for x in rv:
+#             res.append(x._asdict())
+#
+#         return res
 
-    @marshal_with(resource_fields)
+
+class Punch(Resource):
     def get(self, user_id):
+        user_group = db.session.query(Users.group).filter(Users.userId == user_id).one()
+        user_group_suffix = user_group.group.split('OP/SCN-')[1]
+
+        if len(user_group_suffix) > 2 and not is_central(user_group_suffix):
+            group = user_group_suffix[:3]
+        elif len(user_group_suffix) <= 2 and is_management(user_group_suffix):
+            group = user_group_suffix
+        elif is_central(user_group_suffix) is True:
+            group = user_group_suffix[:2]
+        else:
+            pass
+
         rv = db.session.query(
             Tasks.id,
+            Tasks.taskTitle,
+            Tasks.taskDescription,
+            Tasks.createBy,
             func.timestamp(Tasks.nextLoopAt, Tasks.remindAt).label('needFinishBefore'),
             Tasks.punchTime,
             (Tasks.frequency != 0).label('isLoop'),
             (or_(Tasks.punchTime > func.timestamp(Tasks.nextLoopAt, Tasks.remindAt),
                  Tasks.nextLoopAt < func.current_timestamp())).label('isDelay'),
-            Tasks.isDone
-        ).filter(Tasks.createBy == user_id).order_by(func.timestamp(Tasks.nextLoopAt, Tasks.remindAt)).all()
+            Tasks.isDone,
+            Users.group,
+            Users.userName
+        ) \
+            .join(Users, Tasks.createBy == Users.userId) \
+            .filter(Users.group.like('%%%s%%' % group),
+                    and_(Tasks.nextLoopAt <= rolling_seven()[1],
+                         Tasks.nextLoopAt >= rolling_seven()[0])
+                    ).order_by(func.timestamp(Tasks.nextLoopAt, Tasks.remindAt)).all()
 
         res = []
 
         for x in rv:
             res.append(x._asdict())
 
-        return res
+        res.sort(key=itemgetter('userName'))
+        res_grouped = groupby(res, itemgetter('userName'))
+
+        result = dict([(key, list(group)) for key, group in res_grouped])
+        return jsonify(result)

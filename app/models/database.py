@@ -15,9 +15,10 @@ class Users(db.Model):
     userId      = Column(Integer, nullable=False, unique=True)
     userName    = Column(String(50), nullable=False)
     password    = Column(String(100), nullable=False, default='123456')
-    mailAddress = Column(String(100), nullable=False)
+    mailAddress = Column(String(100))
     isActivated = Column(BOOLEAN)
-    segmentCode = Column(String(10))
+    segmentCode = Column(String(20))
+    group       = Column(String(20))
 
 
 class Tasks(db.Model):
@@ -38,3 +39,11 @@ class Tasks(db.Model):
     isLoop          = Column(BOOLEAN, default=False)
     isVisible       = Column(BOOLEAN, default=True)
     taskTags        = Column(String(100))
+
+
+class Tree(db.Model):
+    __tablename__ = 'std_tree'
+
+    id   = Column(Integer, autoincrement=True, primary_key=True)
+    tree = Column(String(20), nullable=False)
+    node = Column(String(100))
