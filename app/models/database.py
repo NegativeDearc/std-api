@@ -39,6 +39,7 @@ class Tasks(db.Model):
     isLoop          = Column(BOOLEAN, default=False)
     isVisible       = Column(BOOLEAN, default=True)
     taskTags        = Column(String(100))
+    remark          = Column(String(200))
 
 
 class Tree(db.Model):

@@ -38,7 +38,8 @@ class Task(Resource):
         'isDone': fields.Boolean,
         'isLoop': fields.Boolean,
         'taskTags': fields.String,
-        'isVisible': fields.Boolean
+        'isVisible': fields.Boolean,
+        'remark': fields.String
     }
 
     @marshal_with(resource_fields)
@@ -55,6 +56,7 @@ class Task(Resource):
         parser.add_argument('frequency', type=str)
         parser.add_argument('remindAt', type=str)
         parser.add_argument('taskTags', type=str)
+        parser.add_argument('remark', type=str)
 
         args = parser.parse_args()
 
@@ -220,40 +222,6 @@ class Dash(Resource):
         return {'OTF': on_time_finish[0], 'IP': in_progress[0], 'D': delay[0]}, 200
 
 
-# class Punch(Resource):
-#     # ref: https://github.com/flask-restful/flask-restful/issues/469
-#     # for marshal issue all null problem
-#     resource_fields = {
-#         'needFinishBefore': fields.DateTime(dt_format='iso8601'),
-#         'punchTime': fields.DateTime(dt_format='iso8601'),
-#         'isDelay': fields.Boolean,
-#         'isDone': fields.Boolean,
-#         'isLoop': fields.Boolean
-#     }
-#
-#     @marshal_with(resource_fields)
-#     def get(self, user_id):
-#         rv = db.session.query(
-#             Tasks.id,
-#             func.timestamp(Tasks.nextLoopAt, Tasks.remindAt).label('needFinishBefore'),
-#             Tasks.punchTime,
-#             (Tasks.frequency != 0).label('isLoop'),
-#             (or_(Tasks.punchTime > func.timestamp(Tasks.nextLoopAt, Tasks.remindAt),
-#                  Tasks.nextLoopAt < func.current_timestamp())).label('isDelay'),
-#             Tasks.isDone
-#         ).filter(Tasks.createBy == user_id,
-#                  and_(Tasks.nextLoopAt <= rolling_seven()[1],
-#                       Tasks.nextLoopAt >= rolling_seven()[0])
-#                  ).order_by(func.timestamp(Tasks.nextLoopAt, Tasks.remindAt)).all()
-#
-#         res = []
-#
-#         for x in rv:
-#             res.append(x._asdict())
-#
-#         return res
-
-
 class Punch(Resource):
     def get(self, user_id):
         user_group = db.session.query(Users.group).filter(Users.userId == user_id).one()
@@ -298,3 +266,15 @@ class Punch(Resource):
 
         result = dict([(key, list(group)) for key, group in res_grouped])
         return jsonify(result)
+
+
+class ResetPassword(Resource):
+    def post(self, user_id):
+        print(request.form)
+        user = db.session.query(Users).filter(Users.userId == user_id).one()
+        if user and user.password == request.form.get('original'):
+            user.password = request.form.get('new')
+            db.session.commit()
+            return make_response(('Modified Success', 200))
+        else:
+            return make_response(('Error!', 401))

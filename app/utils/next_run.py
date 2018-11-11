@@ -8,7 +8,7 @@ def next_run(freq: str, last_run_at):
     else:
         week_index = freq.split(',')
         if last_run_at is None:
-            _d = datetime.datetime.now()
+            _d = datetime.datetime.now() + datetime.timedelta(days=1)
         else:
             if isinstance(last_run_at, str):
                 _d = parse(last_run_at) + datetime.timedelta(days=1)
