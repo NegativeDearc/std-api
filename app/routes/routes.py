@@ -137,26 +137,35 @@ class UserTask(Resource):
         'isDone': fields.Boolean,
         'isLoop': fields.Boolean,
         'taskTags': fields.String,
-        'isVisible': fields.Boolean
+        'isVisible': fields.Boolean,
+        'remark': fields.String
     }
 
     @marshal_with(resource_fields)
     def get(self, user_id):
+        # if need sort by multi-key
+        # .order_by(asc(Tasks.isDone), asc(func.timestamp(Tasks.nextLoopAt, Tasks.remindAt))) \
+
         tasks = db.session.query(Tasks) \
             .filter(Tasks.createBy == user_id, Tasks.isVisible == True) \
-            .order_by(asc(Tasks.isDone), desc(Tasks.nextLoopAt)) \
+            .order_by(asc(Tasks.isDone), asc(func.timestamp(Tasks.nextLoopAt, Tasks.remindAt))) \
             .all()
         db.session.close()
 
         return tasks, 200
 
     def post(self, user_id):
+        if request.form.get("taskDescription") in ['null', '', 'undefined']:
+            task_description = None
+        else:
+            task_description = request.form.get("taskDescription")
+
         task = Tasks(
             taskTitle=request.form.get("taskName"),
-            taskDescription=request.form.get("taskDescription"),
+            taskDescription=task_description,
             createBy=user_id,
             frequency=request.form.get("taskRepeatInterval"),
-            remindAt=request.form.get("taskTimeSlot"),
+            remindAt=request.form.get("taskTimeSlot", None),
             dueDate=request.form.get("taskDueDateParsed"),
             taskTags=request.form.get("taskTags"),
             nextLoopAt=next_run(request.form.get("taskRepeatInterval"), last_run_at=None)
