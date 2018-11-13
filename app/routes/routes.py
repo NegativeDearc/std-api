@@ -253,8 +253,7 @@ class Punch(Resource):
             func.timestamp(Tasks.nextLoopAt, Tasks.remindAt).label('needFinishBefore'),
             Tasks.punchTime,
             (Tasks.frequency != 0).label('isLoop'),
-            (or_(Tasks.punchTime > func.timestamp(Tasks.nextLoopAt, Tasks.remindAt),
-                 Tasks.nextLoopAt < func.current_timestamp())).label('isDelay'),
+            Tasks.punchTime > func.timestamp(Tasks.nextLoopAt, Tasks.remindAt).label('isDelay'),
             Tasks.isDone,
             Users.group,
             Users.userName
@@ -262,7 +261,8 @@ class Punch(Resource):
             .join(Users, Tasks.createBy == Users.userId) \
             .filter(Users.group.like('%%%s%%' % group),
                     and_(Tasks.nextLoopAt <= rolling_seven()[1],
-                         Tasks.nextLoopAt >= rolling_seven()[0])
+                         Tasks.nextLoopAt >= rolling_seven()[0]),
+                    Tasks.isVisible == False
                     ).order_by(func.timestamp(Tasks.nextLoopAt, Tasks.remindAt)).all()
 
         res = []
