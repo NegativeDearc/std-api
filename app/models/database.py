@@ -2,10 +2,17 @@ from sqlalchemy import Column, String, Integer, BOOLEAN, DATE, TIMESTAMP
 from uuid import uuid4
 from app import db
 from sqlalchemy.dialects.mysql import TIME
+from cron_descriptor import get_description, Options
 
 
 def generate_uid():
     return uuid4().__str__()
+
+
+def get_cron_description(cron_expression):
+    options = Options()
+    options.locale_code = 'zh_CN'
+    return get_description(cron_expression, options).__str__()
 
 
 class Users(db.Model):
@@ -31,6 +38,7 @@ class Tasks(db.Model):
     createBy        = Column(Integer, nullable=False)
     category        = Column(String(20))
     frequency       = Column(String(50))
+    freqDescription = Column(String(100))
     nextLoopAt      = Column(TIMESTAMP)
     punchTime       = Column(TIMESTAMP)
     remindAt        = Column(TIME, nullable=False)
@@ -40,6 +48,19 @@ class Tasks(db.Model):
     isVisible       = Column(BOOLEAN, default=True)
     taskTags        = Column(String(100))
     remark          = Column(String(200))
+
+    def get_cron_description(self, expression):
+        options = Options()
+        options.locale_code = 'zh_CN'
+        return get_description(expression, options).__str__()
+
+    @property
+    def cron(self):
+        pass
+
+    @cron.setter
+    def cron(self):
+        self.freqDescription = self.get_cron_description(self.frequency)
 
 
 class Tree(db.Model):

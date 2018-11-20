@@ -5,6 +5,7 @@ from flask import jsonify, request, make_response
 from itertools import groupby
 from operator import itemgetter
 from sqlalchemy import desc, asc, or_, and_, func
+from cron_descriptor import get_description, Options
 from app.utils.next_run import next_run
 from app.utils.rolling_seven_days_from_now import rolling_seven
 from app.utils.pattern_search import is_central, is_management
@@ -49,25 +50,17 @@ class Task(Resource):
         return task, 200
 
     def post(self, task_id):
-        parser = reqparse.RequestParser()
-        parser.add_argument('taskTitle', type=str)
-        parser.add_argument('taskDescription', type=str)
-        parser.add_argument('dueDate', type=str)
-        parser.add_argument('frequency', type=str)
-        parser.add_argument('remindAt', type=str)
-        parser.add_argument('taskTags', type=str)
-        parser.add_argument('remark', type=str)
-
-        args = parser.parse_args()
-
-        form = {}
-
-        for k, v in args.items():
-            if v is not None:
-                form.update({k: v})
-
+        print(request.json)
         db.session.query(Tasks).filter(Tasks.id == task_id) \
-            .update(form)
+            .update({
+                'taskTitle': request.json.get("taskTitle"),
+                'taskDescription': request.json.get("taskDescription", None),
+                'frequency': request.json.get("taskRepeatInterval"),
+                'remindAt': request.json.get("remindAt", None),
+                'taskTags': request.json.get("taskTags"),
+                'nextLoopAt': next_run(request.json.get("taskRepeatInterval"), last_run_at=None),
+                'remark': request.json.get("remark", None)
+            })
         db.session.commit()
 
         return make_response(('UPDATED', 200))
@@ -83,7 +76,7 @@ class Task(Resource):
 
         task = db.session.query(Tasks).filter(Tasks.id == task_id).first()
 
-        if task.frequency != '' and \
+        if task.frequency is not None and \
                 task.isDone is False and \
                 (task.isLoop is False or task.isLoop is None):
             new_task = Tasks(
@@ -102,10 +95,10 @@ class Task(Resource):
 
         db.session.query(Tasks).filter(Tasks.id == task_id) \
             .update({
-            'isDone': is_done,
-            'punchTime': datetime.datetime.now() if is_done else None,
-            'isLoop': True
-        })
+                'isDone': is_done,
+                'punchTime': datetime.datetime.now() if is_done else None,
+                'isLoop': True
+            })
 
         try:
             db.session.commit()
@@ -155,20 +148,17 @@ class UserTask(Resource):
         return tasks, 200
 
     def post(self, user_id):
-        if request.form.get("taskDescription") in ['null', '', 'undefined']:
-            task_description = None
-        else:
-            task_description = request.form.get("taskDescription")
+        print(request.json)
 
         task = Tasks(
-            taskTitle=request.form.get("taskName"),
-            taskDescription=task_description,
+            taskTitle=request.json.get("taskTitle"),
+            taskDescription=request.json.get("taskDescription"),
             createBy=user_id,
-            frequency=request.form.get("taskRepeatInterval"),
-            remindAt=request.form.get("taskTimeSlot", None),
-            dueDate=request.form.get("taskDueDateParsed"),
-            taskTags=request.form.get("taskTags"),
-            nextLoopAt=next_run(request.form.get("taskRepeatInterval"), last_run_at=None)
+            frequency=request.json.get("taskRepeatInterval"),
+            freqDescription=request.json.get("taskFreqDescription", None),
+            remindAt=request.json.get("taskRemindAt", None),
+            taskTags=request.json.get("taskTags"),
+            nextLoopAt=next_run(request.json.get("taskRepeatInterval"), last_run_at=None)
         )
 
         db.session.add(task)
@@ -201,7 +191,7 @@ class Dash(Resource):
             .filter(
             Tasks.createBy == user_id,
             Tasks.isVisible == True,
-            Tasks.punchTime <= func.timestamp(Tasks.nextLoopAt, Tasks.remindAt)
+            Tasks.punchTime <= Tasks.nextLoopAt
         ).one()
 
         in_progress = db.session.query(func.count(Tasks.id)) \
@@ -209,7 +199,7 @@ class Dash(Resource):
             Tasks.createBy == user_id,
             Tasks.isDone == False,
             Tasks.isVisible == True,
-            func.timestamp(Tasks.nextLoopAt, Tasks.remindAt) >= datetime.datetime.now(),
+            Tasks.nextLoopAt >= datetime.datetime.now(),
         ).one()
 
         delay = db.session.query(func.count(Tasks.id)) \
@@ -219,12 +209,12 @@ class Dash(Resource):
                     Tasks.createBy == user_id,
                     Tasks.isDone == False,
                     Tasks.isVisible == True,
-                    func.timestamp(Tasks.nextLoopAt, Tasks.remindAt) < datetime.datetime.now()),
+                    Tasks.nextLoopAt < datetime.datetime.now()),
                 and_(
                     Tasks.createBy == user_id,
                     Tasks.isDone == True,
                     Tasks.isVisible == True,
-                    Tasks.punchTime > func.timestamp(Tasks.nextLoopAt, Tasks.remindAt))
+                    Tasks.punchTime > Tasks.nextLoopAt)
             )
         ).one()
 
@@ -250,16 +240,16 @@ class Punch(Resource):
             Tasks.taskTitle,
             Tasks.taskDescription,
             Tasks.createBy,
-            func.timestamp(Tasks.nextLoopAt, Tasks.remindAt).label('needFinishBefore'),
+            Tasks.nextLoopAt.label('needFinishBefore'),
             Tasks.punchTime,
             (Tasks.frequency != 0).label('isLoop'),
             (or_(
                 and_(
                     Tasks.isDone == True,
-                    Tasks.punchTime > func.timestamp(Tasks.nextLoopAt, Tasks.remindAt)),
+                    Tasks.punchTime > Tasks.nextLoopAt),
                 and_(
                     Tasks.isDone == False,
-                    func.current_timestamp() > func.timestamp(Tasks.nextLoopAt, Tasks.remindAt))
+                    func.current_timestamp() > Tasks.nextLoopAt)
             )).label('isDelay'),
             Tasks.isDone,
             Users.group,
@@ -270,7 +260,7 @@ class Punch(Resource):
                     and_(Tasks.nextLoopAt <= rolling_seven()[1],
                          Tasks.nextLoopAt >= rolling_seven()[0]),
                     Tasks.isVisible == True
-                    ).order_by(func.timestamp(Tasks.nextLoopAt, Tasks.remindAt)).all()
+                    ).order_by(Tasks.nextLoopAt).all()
 
         res = []
 
@@ -294,3 +284,19 @@ class ResetPassword(Resource):
             return make_response(('Modified Success', 200))
         else:
             return make_response(('Error!', 401))
+
+
+class CronExpression(Resource):
+    options = Options()
+    options.locale_code = 'zh_CN'
+
+    def post(self):
+        try:
+            cron_expression = request.form.get('expression', None)
+            if cron_expression:
+                expression = get_description(cron_expression, options=self.options)
+                return {'description': str(expression)}, 200
+            else:
+                return make_response(('', 200))
+        except Exception as e:
+            return {'err': 'not valid %s' % e}, 500
