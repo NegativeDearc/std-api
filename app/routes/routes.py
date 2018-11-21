@@ -50,32 +50,22 @@ class Task(Resource):
         return task, 200
 
     def post(self, task_id):
-        # print(request.json)
-        # searching task last done, when editing this task's frequency, will calculate from last loop time
         this_task = db.session.query(Tasks).filter(Tasks.id == task_id).first()
-        last_task = db.session.query(Tasks).\
-            filter(Tasks.uid == this_task.uid,
-                   Tasks.id != this_task.id).\
-            order_by(desc(Tasks.nextLoopAt)).first()
+        update_form = request.json
 
-        if not last_task:
-            last_run_at = datetime.datetime.now()
-        else:
-            last_run_at = last_task.nextLoopAt
+        for k in list(update_form.keys()):
+            if getattr(this_task, k) == update_form[k]:
+                del update_form[k]
 
-        db.session.query(Tasks).filter(Tasks.id == task_id) \
-            .update({
-                'taskTitle': request.json.get("taskTitle"),
-                'taskDescription': request.json.get("taskDescription", None),
-                'frequency': request.json.get("taskRepeatInterval"),
-                'remindAt': request.json.get("remindAt", None),
-                'taskTags': request.json.get("taskTags"),
-                'nextLoopAt': next_run(request.json.get("taskRepeatInterval"), last_run_at=last_run_at),
-                'remark': request.json.get("remark", None)
-            })
-        db.session.commit()
-
-        return make_response(('UPDATED', 200))
+        try:
+            db.session.query(Tasks).filter(Tasks.id == task_id).update(update_form)
+            if 'frequency' in update_form.keys():
+                this_task.nextLoopAt = next_run(update_form.get('frequency'), last_run_at=None)
+            db.session.commit()
+            return make_response(('updated', 200))
+        except Exception as e:
+            db.session.rollback()
+            return make_response((str(e), 500))
 
     @marshal_with(resource_fields)
     def put(self, task_id):
