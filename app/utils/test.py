@@ -6,13 +6,24 @@ from datetime import datetime
 def test_cron_expression(cron_string: str):
     options = Options()
     options.locale_code = 'zh_CN'
-    # print(get_description(cron_string, options))
     base = datetime.now()
-    iter = croniter(cron_string, base)
+    iter = croniter(cron_string, start_time=base, day_or=False)
     print(iter.get_prev(datetime))
     print(iter.get_current(datetime))
+    print(iter.get_next(datetime))
+    print(iter.get_next(datetime))
+    print(iter.get_next(datetime))
+    print(iter.get_next(datetime))
+    print(iter.get_next(datetime))
+    print(iter.get_next(datetime))
+    print(iter.get_next(datetime))
+    print(iter.get_next(datetime))
     print(iter.get_next(datetime))
 
 
 if __name__ == '__main__':
-    test_cron_expression('05 12 */21 * 2,3#1')
+    test_cron_expression('05 13 */1 * 1')
+    print('------')
+    test_cron_expression('05 13 * * 1')
+    print('------')
+    test_cron_expression('05 13 1-10 * 1')
