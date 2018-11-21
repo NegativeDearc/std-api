@@ -14,8 +14,9 @@ def next_run(freq: str, last_run_at):
                 _d = parse(last_run_at)
             else:
                 _d = last_run_at
-
-        _iter = croniter(freq, _d)
+        # must indicate day_or as False to make sure the day_of_month/day_of week condition can be satisfied both
+        # https://github.com/kiorky/croniter/pull/17
+        _iter = croniter(freq, start_time=_d, day_or=False)
 
         return _iter.get_next(datetime)
 
