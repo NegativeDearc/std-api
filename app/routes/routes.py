@@ -57,15 +57,18 @@ class Task(Resource):
             if getattr(this_task, k) == update_form[k]:
                 del update_form[k]
 
-        try:
-            db.session.query(Tasks).filter(Tasks.id == task_id).update(update_form)
-            if 'frequency' in update_form.keys():
-                this_task.nextLoopAt = next_run(update_form.get('frequency'), last_run_at=None)
-            db.session.commit()
-            return make_response(('updated', 200))
-        except Exception as e:
-            db.session.rollback()
-            return make_response((str(e), 500))
+        if update_form:
+            try:
+                db.session.query(Tasks).filter(Tasks.id == task_id).update(update_form)
+                if 'frequency' in update_form.keys():
+                    this_task.nextLoopAt = next_run(update_form.get('frequency'), last_run_at=None)
+                db.session.commit()
+                return make_response(('updated', 200))
+            except Exception as e:
+                db.session.rollback()
+                return make_response((str(e), 500))
+        else:
+            pass
 
     @marshal_with(resource_fields)
     def put(self, task_id):
