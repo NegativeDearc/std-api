@@ -17,7 +17,7 @@ class Login(Resource):
         user = db.session.query(Users).filter(Users.userId == request.form['userId']).first()
         db.session.close()
         if user and user.password == request.form['password']:
-            response = jsonify({"userId": user.userId})
+            response = jsonify({"userId": user.userId, "userName": user.userName, "userGroup": user.group})
             response.status_code = 200
             return response
         else:
