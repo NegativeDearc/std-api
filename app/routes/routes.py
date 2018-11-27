@@ -325,7 +325,7 @@ class PlantDash(Resource):
                     Tasks.isVisible == True).one()
 
         try:
-            rate = '%.1f' % finished.count/total.count * 100
+            rate = '%.1f' % (finished.count/total.count * 100)
         except ZeroDivisionError:
             rate = None
 
