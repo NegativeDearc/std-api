@@ -7,7 +7,7 @@ from operator import itemgetter
 from sqlalchemy import desc, asc, or_, and_, func
 from cron_descriptor import get_description, Options
 from app.utils.next_run import next_run
-from app.utils.rolling_seven_days_from_now import rolling_seven
+from app.utils.rolling_days_from_now import rolling_days
 from app.utils.pattern_search import is_central, is_management
 import datetime
 
@@ -262,8 +262,8 @@ class Punch(Resource):
         ) \
             .join(Users, Tasks.createBy == Users.userId) \
             .filter(Users.group.like('%%%s%%' % group),
-                    and_(Tasks.nextLoopAt <= rolling_seven()[1],
-                         Tasks.nextLoopAt >= rolling_seven()[0]),
+                    and_(Tasks.nextLoopAt <= rolling_days()[1],
+                         Tasks.nextLoopAt >= rolling_days()[0]),
                     Tasks.isVisible == True
                     ).order_by(Tasks.nextLoopAt).all()
 
@@ -305,3 +305,69 @@ class CronExpression(Resource):
                 return make_response(('', 200))
         except Exception as e:
             return {'err': 'not valid %s' % e}, 500
+
+
+class PlantDash(Resource):
+    def get(self, segment):
+        finished = db.session.query(func.count(Tasks.id).label('count')) \
+            .join(Users, Tasks.createBy == Users.userId) \
+            .filter(Users.group.like('%%%s%%' % segment),
+                    Tasks.isDone == True,
+                    and_(Tasks.nextLoopAt <= rolling_days()[1],
+                         Tasks.nextLoopAt >= rolling_days()[0]),
+                    Tasks.isVisible == True).one()
+
+        total = db.session.query(func.count(Tasks.id).label('count'))\
+            .join(Users, Tasks.createBy == Users.userId) \
+            .filter(Users.group.like('%%%s%%' % segment),
+                    and_(Tasks.nextLoopAt <= rolling_days()[1],
+                         Tasks.nextLoopAt >= rolling_days()[0]),
+                    Tasks.isVisible == True).one()
+
+        try:
+            rate = finished.count/total.count * 100
+        except ZeroDivisionError:
+            rate = None
+
+        return jsonify({'finishRate': rate})
+
+
+class PlantDashDetail(Resource):
+    def get(self, segment):
+        rv = db.session.query(
+            Tasks.id,
+            Tasks.taskTitle,
+            Tasks.taskDescription,
+            Tasks.createBy,
+            Tasks.nextLoopAt.label('needFinishBefore'),
+            Tasks.punchTime,
+            (Tasks.frequency != 0).label('isLoop'),
+            (or_(
+                and_(
+                    Tasks.isDone == True,
+                    Tasks.punchTime > Tasks.nextLoopAt),
+                and_(
+                    Tasks.isDone == False,
+                    func.current_timestamp() > Tasks.nextLoopAt)
+            )).label('isDelay'),
+            Tasks.isDone,
+            Users.group,
+            Users.userName
+        ) \
+            .join(Users, Tasks.createBy == Users.userId) \
+            .filter(Users.group.like('%%%s%%' % segment),
+                    and_(Tasks.nextLoopAt <= rolling_days()[1],
+                         Tasks.nextLoopAt >= rolling_days()[0]),
+                    Tasks.isVisible == True
+                    ).order_by(Tasks.nextLoopAt).all()
+
+        res = []
+
+        for x in rv:
+            res.append(x._asdict())
+
+        res.sort(key=itemgetter('userName'))
+        res_grouped = groupby(res, itemgetter('userName'))
+
+        result = dict([(key, list(group)) for key, group in res_grouped])
+        return jsonify(result)
