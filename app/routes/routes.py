@@ -40,6 +40,7 @@ class Task(Resource):
         'isLoop': fields.Boolean,
         'taskTags': fields.String,
         'isVisible': fields.Boolean,
+        'isFavorite': fields.Boolean,
         'remark': fields.String
     }
 
@@ -136,6 +137,7 @@ class UserTask(Resource):
         'isLoop': fields.Boolean,
         'taskTags': fields.String,
         'isVisible': fields.Boolean,
+        'isFavorite': fields.Boolean,
         'remark': fields.String
     }
 
@@ -146,15 +148,14 @@ class UserTask(Resource):
 
         tasks = db.session.query(Tasks) \
             .filter(Tasks.createBy == user_id, Tasks.isVisible == True) \
-            .order_by(asc(Tasks.isDone), asc(func.timestamp(Tasks.nextLoopAt, Tasks.remindAt))) \
+            .order_by(asc(Tasks.isDone), asc(func.timestamp(Tasks.nextLoopAt, Tasks.remindAt)))\
             .all()
         db.session.close()
 
         return tasks, 200
 
     def post(self, user_id):
-        print(request.json)
-
+        # print(request.json)
         task = Tasks(
             taskTitle=request.json.get("taskTitle"),
             taskDescription=request.json.get("taskDescription"),
