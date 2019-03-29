@@ -2,9 +2,11 @@ from flask import Flask
 from flask_cors import CORS
 from flask_restful import Api
 from flask_sqlalchemy import SQLAlchemy
+from flask_socketio import SocketIO
 from app.logs.log_setting import DebugFalseLog
 
 cors = CORS()
+socketio = SocketIO()
 api = Api()
 db = SQLAlchemy(use_native_unicode='utf8')
 
@@ -28,11 +30,15 @@ def init_app(cfg):
     api.add_resource(CronExpression,  '/api/cron/expression')
 
     api.init_app(app)
+    socketio.init_app(app)
     cors.init_app(app)
     db.init_app(app)
     db.app = app
 
     handler = DebugFalseLog().get_handler()
     app.logger.addHandler(handler)
+
+    from app.routes.websocket import ConnectionStatus
+    socketio.on_namespace(ConnectionStatus('/api/connection'))
 
     return app
