@@ -9,7 +9,7 @@ print(app.config)
 
 if __name__ == '__main__':
     if app.debug:
-        socketio.run(app, port=7659)
+        socketio.run(app, port=7659, host='0.0.0.0')
     else:
         # gevent is supported in a number of different configurations.
         # The long-polling transport is fully supported with the gevent package,
@@ -18,4 +18,4 @@ if __name__ == '__main__':
         # Installing the gevent-websocket package adds WebSocket support to gevent or one can use the uWSGI web server,
         # which comes with WebSocket functionality. The use of gevent is also a performant option,
         #  but slightly lower than eventlet.
-        socketio.run(app, port=7659)
+        socketio.run(app, port=7659, host='0.0.0.0')
