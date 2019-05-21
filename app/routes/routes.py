@@ -155,7 +155,6 @@ class UserTask(Resource):
         return tasks, 200
 
     def post(self, user_id):
-        # print(request.json)
         task = Tasks(
             taskTitle=request.json.get("taskTitle"),
             taskDescription=request.json.get("taskDescription"),
@@ -184,6 +183,26 @@ class UserTask(Resource):
         db.session.commit()
 
         return make_response(('OK', 200))
+
+
+class UserTaskOnce(Resource):
+    def post(self, user_id):
+        task = Tasks(
+            taskTitle=request.json.get("taskTitle"),
+            createBy=user_id,
+            isLoop=True,
+            frequency=request.json.get("taskRepeatInterval"),
+            remindAt=request.json.get("taskRemindAt", None),
+            nextLoopAt=request.json.get("taskDueDate")
+        )
+
+        db.session.add(task)
+        try:
+            db.session.commit()
+            return make_response(('created', 201))
+        except Exception as e:
+            db.session.rollback()
+            return make_response((str(e), 500))
 
 
 class Search(Resource):

@@ -41,7 +41,7 @@ class Tasks(db.Model):
     freqDescription  = Column(String(100))
     nextLoopAt       = Column(TIMESTAMP)
     punchTime        = Column(TIMESTAMP)
-    remindAt         = Column(TIME)
+    remindAt         = Column(TIME, default='17:00:00')
     dueDate          = Column(DATE)
     isDone           = Column(BOOLEAN, default=False)
     isLoop           = Column(BOOLEAN, default=False)
